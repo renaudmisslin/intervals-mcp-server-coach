@@ -1,0 +1,12 @@
+{
+  "athletes": {
+    "renaud": {
+      "id": "i12345",
+      "api_key": "VOTRE_CLE_API_ICI"
+    },
+    "thomas": {
+      "id": "i67890",
+      "api_key": "CLE_API_DE_THOMAS"
+    }
+  }
+}

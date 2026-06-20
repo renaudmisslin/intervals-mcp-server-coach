@@ -147,6 +147,43 @@ mcp install src/intervals_mcp_server/server.py --name "Intervals.icu" --with-edi
 
 **Windows Store install: config changes not taking effect** — You may be editing the wrong config file. Claude Desktop installed from the Microsoft Store reads from `AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`, not `AppData\Roaming\Claude\`.
 
+#### Using Claude Code instead of Claude Desktop
+
+> **Claude Code** (the CLI tool `claude` or the Claude Code Desktop Windows Store app) is a **different application** from Claude Desktop and requires a different setup.
+
+With Claude Code, editing `claude_desktop_config.json` or adding `mcpServers` to `~/.claude/settings.json` has **no effect** for local stdio MCP servers — the app forwards the config to a remote SDK that cannot spawn a local process.
+
+**Symptoms:** `claude mcp list` doesn't show your server; tools never appear in the session; logs show `serverCount=1` but tool count never increases.
+
+**Fix — Windows:**
+
+1. Create a wrapper script `run_server.cmd` in the project directory:
+   ```batch
+   @echo off
+   cd /d "C:\Users\<USERNAME>\intervals-mcp-server-git"
+   "C:\Users\<USERNAME>\.local\bin\uv.exe" run intervals-mcp-server
+   ```
+   (Find your uv path with: `(Get-Command uv).Source`)
+
+2. Register the server:
+   ```powershell
+   claude mcp add intervals-coach --scope user "C:\Users\<USERNAME>\intervals-mcp-server-git\run_server.cmd"
+   ```
+
+3. Verify:
+   ```powershell
+   claude mcp list
+   # Should show: intervals-coach: ... - √ Connected
+   ```
+
+4. Restart Claude Code and open a new session.
+
+**Fix — macOS/Linux:**
+
+```bash
+claude mcp add intervals-coach --scope user -- uv --directory /path/to/intervals-mcp-server-git run intervals-mcp-server
+```
+
 ## Usage with Claude
 
 ### 1. Configure Claude Desktop
