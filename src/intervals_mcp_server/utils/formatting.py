@@ -143,6 +143,70 @@ ID: {gear_id}
 """
 
 
+def format_activity_brief(activity: dict[str, Any]) -> str:
+    """One-line activity summary for list views (low token usage)."""
+    start = activity.get("start_date_local", activity.get("start_date", activity.get("startTime", "?")))
+    date_str = start[:10] if isinstance(start, str) else "?"
+
+    dist_m = activity.get("distance", 0) or 0
+    dist_str = f"{dist_m / 1000:.1f}km" if dist_m else ""
+
+    secs = activity.get("moving_time", activity.get("elapsed_time", 0)) or 0
+    if secs:
+        h, rem = divmod(int(secs), 3600)
+        m = rem // 60
+        dur_str = f"{h}h{m:02d}" if h else f"{m}min"
+    else:
+        dur_str = ""
+
+    elev = activity.get("total_elevation_gain", 0) or 0
+    elev_str = f"{int(elev)}m↑" if elev else ""
+
+    tl = activity.get("icu_training_load", activity.get("training_load"))
+    tl_str = f"TL:{tl:.0f}" if isinstance(tl, (int, float)) else ""
+
+    power = activity.get("icu_average_watts", activity.get("average_watts"))
+    power_str = f"{power:.0f}W" if isinstance(power, (int, float)) else ""
+
+    hr = activity.get("average_heartrate", activity.get("avgHr"))
+    hr_str = f"{hr:.0f}bpm" if isinstance(hr, (int, float)) else ""
+
+    sport = activity.get("type", activity.get("sport_type", "?"))
+    name = activity.get("name", "Unnamed")
+    act_id = activity.get("id", "")
+
+    metrics = [s for s in [dist_str, dur_str, elev_str, tl_str, power_str, hr_str] if s]
+    line = f"• {date_str} [{sport}] {name}"
+    if metrics:
+        line += f" — {' | '.join(metrics)}"
+    if act_id:
+        line += f" (id:{act_id})"
+    return line
+
+
+def format_query_meta(
+    count_scanned: int,
+    count_returned: int,
+    start_date: str,
+    end_date: str,
+) -> str:
+    """Compact metadata footer summarizing the query scope."""
+    try:
+        d1 = datetime.strptime(start_date[:10], "%Y-%m-%d")
+        d2 = datetime.strptime(end_date[:10], "%Y-%m-%d")
+        days = (d2 - d1).days + 1
+        date_range = f"{start_date[:10]} → {end_date[:10]} ({days}j)"
+    except ValueError:
+        date_range = f"{start_date[:10]} → {end_date[:10]}"
+
+    if count_scanned > count_returned:
+        scope = f"{count_returned}/{count_scanned} séances"
+    else:
+        scope = f"{count_returned} séance(s)"
+
+    return f"\n---\n🔍 {scope} | {date_range}"
+
+
 def format_workout(workout: dict[str, Any]) -> str:
     """Format a workout into a readable string."""
     return f"""
