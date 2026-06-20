@@ -48,9 +48,12 @@ def format_activity_summary(activity: dict[str, Any]) -> str:
     if isinstance(rpe, (int, float)):
         rpe = f"{rpe}/10"
 
-    feel = activity.get("feel", "N/A")
-    if isinstance(feel, int):
-        feel = f"{feel}/5"
+    feel_raw = activity.get("feel", "N/A")
+    if isinstance(feel_raw, int):
+        label = _FEEL_LABELS.get(feel_raw, "?")
+        feel = f"{feel_raw}/5 ({label}) — 1=best, 5=worst"
+    else:
+        feel = feel_raw
 
     # Gear (bike, shoes) - ICU activity payloads include the gear ID but not the
     # gear name (which lives in /athlete/{id}/gear). The tools.gear module
@@ -313,9 +316,18 @@ def _format_menstrual_tracking(entries: dict[str, Any]) -> list[str]:
     return menstrual_lines
 
 
+_FEEL_LABELS = {1: "Great", 2: "Good", 3: "Average", 4: "Bad", 5: "Very Bad"}
+
+
 def _format_subjective_feelings(entries: dict[str, Any]) -> list[str]:
     """Format subjective feelings section."""
     subjective_lines = []
+
+    feel = entries.get("feel")
+    if feel is not None:
+        label = _FEEL_LABELS.get(feel, "?") if isinstance(feel, int) else "?"
+        subjective_lines.append(f"  Feel: {feel}/5 ({label}) — 1=best, 5=worst")
+
     for k, label in [
         ("soreness", "Soreness"),
         ("fatigue", "Fatigue"),
