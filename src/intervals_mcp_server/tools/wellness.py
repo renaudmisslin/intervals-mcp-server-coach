@@ -71,3 +71,71 @@ async def get_wellness_data(
 
     wellness_summary += format_query_meta(count, count, start_date, end_date)
     return wellness_summary
+
+
+@mcp.tool()
+async def update_wellness_nutrition(
+    athlete_name: str,
+    date: str,
+    carbohydrates_g: float | None = None,
+    protein_g: float | None = None,
+    fat_g: float | None = None,
+    kcal: float | None = None,
+    hydration_ml: float | None = None,
+) -> str:
+    """Write nutrition data to Intervals.icu wellness for a specific date.
+
+    Updates macronutrients and/or hydration for one day. Only provided fields
+    are sent — existing fields on that day are preserved.
+
+    Args:
+        athlete_name: Name of the athlete as configured in athletes.json.
+        date: Date in YYYY-MM-DD format (e.g. '2026-06-20').
+        carbohydrates_g: Carbohydrates in grams.
+        protein_g: Protein in grams.
+        fat_g: Total fat in grams.
+        kcal: Total calories (kcal). If omitted and macros provided, not auto-calculated.
+        hydration_ml: Hydration volume in millilitres.
+    """
+    try:
+        athlete_id, api_key = get_athlete_credentials(athlete_name)
+    except ValueError as e:
+        return str(e)
+
+    payload: dict = {}
+    if carbohydrates_g is not None:
+        payload["carbohydrates"] = carbohydrates_g
+    if protein_g is not None:
+        payload["protein"] = protein_g
+    if fat_g is not None:
+        payload["fatTotal"] = fat_g
+    if kcal is not None:
+        payload["kcalConsumed"] = kcal
+    if hydration_ml is not None:
+        payload["hydrationVolume"] = hydration_ml
+
+    if not payload:
+        return "Aucune valeur fournie — rien à enregistrer."
+
+    result = await make_intervals_request(
+        url=f"/athlete/{athlete_id}/wellness/{date}",
+        api_key=api_key,
+        method="PUT",
+        data=payload,
+    )
+
+    if isinstance(result, dict) and "error" in result:
+        return f"Erreur lors de l'enregistrement : {result.get('message', 'inconnue')}"
+
+    lines = [f"✅ Nutrition enregistrée pour {athlete_name} le {date} :"]
+    if carbohydrates_g is not None:
+        lines.append(f"  Glucides : {carbohydrates_g} g")
+    if protein_g is not None:
+        lines.append(f"  Protéines : {protein_g} g")
+    if fat_g is not None:
+        lines.append(f"  Lipides : {fat_g} g")
+    if kcal is not None:
+        lines.append(f"  Calories : {kcal} kcal")
+    if hydration_ml is not None:
+        lines.append(f"  Hydratation : {hydration_ml} ml")
+    return "\n".join(lines)
