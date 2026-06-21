@@ -130,10 +130,15 @@ def _build_row(
     activity: dict,
     work_intervals: list[dict],
     ventilation: str,
+    activity_id: str = "",
 ) -> list[str]:
     """Map activity + interval data to a row aligned with Sheet headers."""
-    # Date
-    date = (activity.get("start_date_local") or activity.get("start_date") or "")[:10]
+    # Date — clickable link to the Intervals.icu activity page
+    date_str = (activity.get("start_date_local") or activity.get("start_date") or "")[:10]
+    if activity_id:
+        date = f'=HYPERLINK("https://intervals.icu/activities/{activity_id}","{date_str}")'
+    else:
+        date = date_str
 
     # Environnement: indoor/trainer → HT, else Ext
     is_indoor = activity.get("indoor") or activity.get("trainer") or activity.get("virtual_run")
@@ -265,7 +270,7 @@ async def export_session_to_sheet(
             "Vérification secondaire : le titre doit contenir un pattern NxM (ex: '3x20min')"
         )
 
-    row = _build_row(headers, activity, work_intervals, ventilation)
+    row = _build_row(headers, activity, work_intervals, ventilation, activity_id)
     ws.append_row(row, value_input_option="USER_ENTERED")
 
     act_name = activity.get("name") or activity_id
