@@ -138,10 +138,15 @@ def _build_row(
     is_indoor = activity.get("indoor") or activity.get("trainer") or activity.get("virtual_run")
     env = "HT" if is_indoor else "Ext"
 
-    # Volume total: toujours en temps (h:mm)
-    secs = activity.get("moving_time") or activity.get("elapsed_time") or 0
-    h, m = divmod(round(secs / 60), 60)
-    volume = f"{h}h{m:02d}" if h else f"{m} min"
+    # Volume total = somme du moving_time des intervalles de travail (N × durée bloc)
+    work_secs = sum(iv.get("moving_time") or iv.get("elapsed_time") or 0 for iv in work_intervals)
+    if work_secs > 0:
+        wh, wm = divmod(round(work_secs / 60), 60)
+        volume = f"{wh}h{wm:02d}" if wh else f"{wm} min"
+    else:
+        secs = activity.get("moving_time") or activity.get("elapsed_time") or 0
+        wh, wm = divmod(round(secs / 60), 60)
+        volume = f"{wh}h{wm:02d}" if wh else f"{wm} min"
 
     # Intervals label
     intervalles = _format_intervals_label(work_intervals)
