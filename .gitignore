@@ -183,3 +183,6 @@ TODO
 .claude/
 .DS_Store
 CLAUDE.md
+
+athletes.json
+sheets_credentials.json

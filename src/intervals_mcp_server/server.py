@@ -50,12 +50,10 @@ from intervals_mcp_server.api.client import (
     httpx_client,  # Re-export for backward compatibility with tests
     make_intervals_request,
 )
-from intervals_mcp_server.config import get_config
 from intervals_mcp_server.mcp_instance import mcp
 
 # Import types and validation
 from intervals_mcp_server.server_setup import setup_transport, start_server
-from intervals_mcp_server.utils.validation import validate_athlete_id
 
 # Configure logging
 logging.basicConfig(
@@ -66,7 +64,6 @@ logging.basicConfig(
 logger = logging.getLogger("intervals_icu_mcp_server")
 
 # Get configuration instance
-config = get_config()
 
 # Import tool modules to register them (tools register themselves via @mcp.tool() decorators)
 # Import tool functions for re-export
@@ -123,10 +120,17 @@ __all__ = [
 
 
 # Run the server
-if __name__ == "__main__":
-    # Validate ATHLETE_ID when server starts (not at import time to allow tests)
-    validate_athlete_id(config.athlete_id)
+from intervals_mcp_server.tools.athlete_management import (
+    get_training_load,
+    list_athletes,
+    post_activity_comment,
+)
+from intervals_mcp_server.tools.sheets import export_session_to_sheet  # noqa: E402
 
-    # Setup transport and start server
+def main() -> None:
     selected_transport = setup_transport()
     start_server(mcp, selected_transport)
+
+
+if __name__ == "__main__":
+    main()
