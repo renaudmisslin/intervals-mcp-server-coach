@@ -41,12 +41,13 @@ def _get_worksheet(tab_name: str = "Feuille 1"):
 
 
 def _extract_nx(title: str) -> tuple[int, int] | None:
-    """Parse 'NxM' or 'N x M' pattern from activity title.
+    """Parse first NxM pattern from activity title, ignoring any suffix.
 
     Returns (n, duration_seconds) or None if not found.
-    Handles: '6x20min', '3 x 20'', 'LT1 6x20min', '6×20mn', etc.
+    Handles: '6x20min', '3 x 20' PL', 'LT1 6x20min ext', '6×20 PL ext', etc.
+    Duration is always interpreted as minutes.
     """
-    match = re.search(r"(\d+)\s*[x×]\s*(\d+)\s*(min|mn|'|m)?", title, re.IGNORECASE)
+    match = re.search(r"(\d+)\s*[x×]\s*(\d+)", title, re.IGNORECASE)
     if match:
         return int(match.group(1)), int(match.group(2)) * 60
     return None
