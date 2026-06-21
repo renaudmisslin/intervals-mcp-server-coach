@@ -303,6 +303,192 @@ Once the server is running and Claude Desktop is configured, you can use the fol
 - `update_custom_item`: Update an existing custom item
 - `delete_custom_item`: Delete a custom item
 
+## Export to Google Sheets
+
+The `export_session_to_sheet` tool appends one row per training session into a Google Sheet. It reads column headers dynamically from the sheet, fetches activity + interval data from Intervals.icu, and fills in the mapped values automatically.
+
+**Columns supported** (any subset, in any order — the tool reads headers from row 1):
+
+| Column header (row 1) | Source |
+|-----------------------|--------|
+| `Date` | Session date from Intervals.icu |
+| `Intervalles` | Detected interval structure, e.g. `3 x 20'` |
+| `Volume total` | Distance (km) or duration (min) for indoor sessions |
+| `Environnement` | `HT` (indoor / trainer) or `Ext` (outdoor) |
+| `Ventilation` | Parameter passed at call time (default: `bouche`) |
+| `Watts moy` | Avg power per work interval, e.g. `270-271-269` |
+| `FC moy` | Avg heart rate per work interval, e.g. `145-146-142` |
+| `Efficacité` | Efficiency Factor (watts ÷ HR) per interval, e.g. `1.86-1.87` |
+| `T° moy` | Average temperature |
+
+> Any column header not in this list is left blank. You can reorder or remove columns freely — the tool reads the actual headers at runtime.
+
+### One-time setup: Google Service Account
+
+This is a one-time setup. **Claude can guide you through each step** — just ask: *"Guide me through the Google Sheets setup for the MCP server"*.
+
+#### Step 1 — Google Cloud Console
+
+Go to https://console.cloud.google.com and select or create a project (any name).
+
+**Verify:** You can see the project name in the top bar.
+
+#### Step 2 — Enable Google Sheets API
+
+In the left menu: **APIs & Services → Library → search "Google Sheets API" → Enable**.
+
+**Verify:** The API status shows "Enabled" on its page.
+
+#### Step 3 — Create a Service Account
+
+**APIs & Services → Credentials → Create Credentials → Service Account**
+
+- Name: `intervals-mcp-sheets` (or any name)
+- Skip the role and user access steps (click Continue / Done)
+
+**Verify:** The service account appears in the Credentials list with an email like `intervals-mcp-sheets@your-project.iam.gserviceaccount.com`.
+
+#### Step 4 — Download the credentials JSON
+
+Click the service account → **Keys tab → Add Key → Create new key → JSON → Create**.
+
+A JSON file downloads automatically. Rename it `sheets_credentials.json` and place it at the root of this project:
+
+```
+intervals-mcp-server-git/
+└── sheets_credentials.json   ← here
+```
+
+> This file is already in `.gitignore` — it will never be committed.
+
+**Verify (PowerShell):**
+```powershell
+Test-Path "C:\Users\<USERNAME>\intervals-mcp-server-git\sheets_credentials.json"
+# Should print: True
+```
+
+#### Step 5 — Share your Google Sheet with the service account
+
+1. Open `sheets_credentials.json` and copy the `client_email` value (looks like `intervals-mcp-sheets@...iam.gserviceaccount.com`)
+2. Open your Google Sheet → **Share** → paste the email → role **Editor** → Send
+
+**Verify:** The service account email appears in the sheet's sharing list.
+
+#### Step 6 — Install dependencies and restart
+
+```powershell
+cd C:\Users\<USERNAME>\intervals-mcp-server-git
+uv sync
+```
+
+Then restart Claude Code so the new tool is loaded.
+
+**Verify:** Ask Claude *"Which tools do you have for Google Sheets?"* — it should mention `export_session_to_sheet`.
+
+### Usage
+
+Once setup is done, tell Claude:
+
+> *"Export session [activity_id] for renaud to the sheet"*
+
+Or with a ventilation override:
+
+> *"Export session [activity_id] for renaud, ventilation=nez"*
+
+Claude calls `export_session_to_sheet(athlete_name="renaud", activity_id="...", ventilation="bouche")` and confirms the row that was added.
+
+To find the activity ID, ask:
+
+> *"Show me the last 5 activities for renaud"* — each line ends with `(id:abc123)`
+
+---
+
+## Adding a new Sheets export tool
+
+This section explains how to add a new tool that writes different data to a Google Sheet (e.g. wellness data, training load, custom fields).
+
+### How it works
+
+All Sheets export logic lives in [`src/intervals_mcp_server/tools/sheets.py`](src/intervals_mcp_server/tools/sheets.py). The pattern is:
+
+1. **Fetch data** from Intervals.icu via `make_intervals_request`
+2. **Read headers** from the target Sheet with `_get_worksheet(tab_name).row_values(1)`
+3. **Map fields** into a dict keyed by lowercase column header
+4. **Append the row** with `ws.append_row(row, value_input_option="USER_ENTERED")`
+
+### Step-by-step
+
+**1. Define your column mapping**
+
+In `sheets.py`, add a `_build_row_xxx()` function that takes your data and returns a `list[str]` aligned with the Sheet headers. Use the existing `_build_row()` as a template:
+
+```python
+def _build_row_wellness(headers: list[str], data: dict) -> list[str]:
+    mapping = {
+        "date": data.get("date", ""),
+        "poids": str(data.get("weight", "")),
+        "fc repos": str(data.get("restingHR", "")),
+        # add more fields here
+    }
+    return [mapping.get(h.lower().strip(), "") for h in headers]
+```
+
+**2. Create the MCP tool**
+
+Add a new `@mcp.tool()` async function in `sheets.py`:
+
+```python
+@mcp.tool()
+async def export_wellness_to_sheet(
+    athlete_name: str,
+    date: str,
+    sheet_tab: str = "Wellness",
+) -> str:
+    """Export daily wellness data for an athlete to a Google Sheet tab."""
+    try:
+        athlete_id, api_key = get_athlete_credentials(athlete_name)
+    except ValueError as e:
+        return str(e)
+
+    result = await make_intervals_request(
+        url=f"/athlete/{athlete_id}/wellness/{date}", api_key=api_key
+    )
+    if isinstance(result, dict) and "error" in result:
+        return f"Error: {result.get('message')}"
+
+    try:
+        ws = _get_worksheet(sheet_tab)
+        headers = ws.row_values(1)
+    except Exception as exc:
+        return f"Google Sheets error: {exc}"
+
+    row = _build_row_wellness(headers, result)
+    ws.append_row(row, value_input_option="USER_ENTERED")
+    return f"✅ Wellness for {date} added to '{sheet_tab}'"
+```
+
+**3. Register in server.py**
+
+Add the new function to the import:
+
+```python
+from intervals_mcp_server.tools.sheets import (
+    export_session_to_sheet,
+    export_wellness_to_sheet,   # ← add this
+)
+```
+
+**4. Sync and restart**
+
+```powershell
+uv sync
+# Restart Claude Code
+```
+
+Ask Claude *"Which Sheets export tools are available?"* to confirm.
+
+---
+
 ## Usage with ChatGPT
 
 ChatGPT’s beta MCP connectors can also talk to this server over the SSE transport.

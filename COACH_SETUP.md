@@ -366,6 +366,139 @@ Puis dans une nouvelle conversation : **"Quels athlètes sont disponibles ?"**
 
 ---
 
+---
+
+## Exporter des données de séance vers Google Sheets
+
+L'outil `export_session_to_sheet` ajoute une ligne par séance dans un Google Sheet. Il lit les en-têtes de la ligne 1 du tableau, récupère les données d'activité et d'intervalles depuis Intervals.icu, et remplit les colonnes correspondantes automatiquement.
+
+**Colonnes reconnues** (dans n'importe quel ordre — l'outil lit les en-têtes au moment de l'appel) :
+
+| En-tête (ligne 1) | Source |
+|-------------------|--------|
+| `Date` | Date de la séance |
+| `Intervalles` | Structure détectée, ex. `3 x 20'` |
+| `Volume total` | Distance (km) ou durée (min) si indoor |
+| `Environnement` | `HT` (indoor/home trainer) ou `Ext` (extérieur) |
+| `Ventilation` | Paramètre passé à l'appel (défaut : `bouche`) |
+| `Watts moy` | Puissance moyenne par intervalle de travail, ex. `270-271-269` |
+| `FC moy` | FC moyenne par intervalle de travail, ex. `145-146-142` |
+| `Efficacité` | Facteur d'efficacité (watts ÷ FC) par intervalle, ex. `1.86-1.87` |
+| `T° moy` | Température moyenne |
+
+> Les colonnes absentes de cette liste sont laissées vides. Tu peux changer l'ordre ou supprimer des colonnes librement.
+
+---
+
+### Configuration du Service Account Google (une seule fois)
+
+> **Claude peut te guider pas à pas.** Dans une conversation, dis simplement : *"Guide-moi pour configurer l'export Google Sheets du MCP"* et suis les instructions.
+
+#### Étape 1 — Google Cloud Console
+
+Ouvre https://console.cloud.google.com et sélectionne ou crée un projet (nom au choix).
+
+✅ **Vérification** : le nom du projet s'affiche en haut de la page.
+
+#### Étape 2 — Activer l'API Google Sheets
+
+Menu gauche → **APIs & Services → Library** → recherche **"Google Sheets API"** → **Enable**.
+
+✅ **Vérification** : la page de l'API affiche le statut "Activée".
+
+#### Étape 3 — Créer un Service Account
+
+**APIs & Services → Credentials → Create Credentials → Service Account**
+
+- Nom : `intervals-mcp-sheets` (ou ce que tu veux)
+- Clique **Continuer** puis **Terminé** sans remplir les rôles
+
+✅ **Vérification** : un compte de service apparaît dans la liste, avec une adresse email du type `intervals-mcp-sheets@mon-projet.iam.gserviceaccount.com`.
+
+#### Étape 4 — Télécharger la clé JSON
+
+Clique sur le compte de service → onglet **Clés** → **Ajouter une clé → Créer une clé → JSON → Créer**.
+
+Un fichier JSON se télécharge. Renomme-le `sheets_credentials.json` et place-le à la racine du projet :
+
+```
+intervals-mcp-server-git/
+└── sheets_credentials.json   ← ici
+```
+
+> Ce fichier est déjà dans `.gitignore` — il ne sera jamais publié sur GitHub.
+
+✅ **Vérification (PowerShell)** :
+```powershell
+Test-Path "C:\Users\$env:USERNAME\intervals-mcp-server-git\sheets_credentials.json"
+# Doit afficher : True
+```
+
+#### Étape 5 — Partager le Sheet avec le Service Account
+
+1. Ouvre `sheets_credentials.json` et copie la valeur du champ `client_email` (ex: `intervals-mcp-sheets@...iam.gserviceaccount.com`)
+2. Ouvre ton Google Sheet → bouton **Partager** → colle l'email → rôle **Éditeur** → Envoyer
+
+✅ **Vérification** : l'adresse email du service account apparaît dans la liste des personnes ayant accès au Sheet.
+
+#### Étape 6 — Installer les dépendances et redémarrer
+
+```powershell
+cd C:\Users\$env:USERNAME\intervals-mcp-server-git
+uv sync
+```
+
+Puis redémarre Claude Code.
+
+✅ **Vérification** : demande à Claude *"Quels outils as-tu pour Google Sheets ?"* — il doit mentionner `export_session_to_sheet`.
+
+---
+
+### Utilisation
+
+Une fois la configuration faite, dis à Claude :
+
+> *"Exporte la séance [activity_id] de renaud dans le Sheet"*
+
+Pour trouver l'activity_id, demande d'abord :
+
+> *"Montre-moi les 5 dernières activités de renaud"* — chaque ligne se termine par `(id:abc123)`
+
+---
+
+### Ajouter un nouvel outil d'export vers Google Sheets
+
+Pour créer un outil similaire qui exporte d'autres données (wellness, charge d'entraînement…) :
+
+**1. Dans `src/intervals_mcp_server/tools/sheets.py`**, ajoute une fonction de mapping :
+
+```python
+def _build_row_wellness(headers: list[str], data: dict) -> list[str]:
+    mapping = {
+        "date": data.get("date", ""),
+        "poids": str(data.get("weight", "")),
+        "fc repos": str(data.get("restingHR", "")),
+    }
+    return [mapping.get(h.lower().strip(), "") for h in headers]
+```
+
+**2. Ajoute le tool MCP** (copie `export_session_to_sheet` et adapte) avec `@mcp.tool()`.
+
+**3. Dans `server.py`**, ajoute le nouveau nom à l'import :
+
+```python
+from intervals_mcp_server.tools.sheets import (
+    export_session_to_sheet,
+    export_wellness_to_sheet,  # ← ajouter
+)
+```
+
+**4. Lance `uv sync` et redémarre Claude Code.**
+
+> **Claude peut t'aider à créer un nouvel outil.** Dis-lui : *"Ajoute un outil qui exporte les données wellness de renaud dans l'onglet 'Wellness' du Sheet"* et il écrira le code.
+
+---
+
 ## Structure des fichiers importants
 
 ```
@@ -383,5 +516,6 @@ intervals-mcp-server/
             ├── activities.py              ← Activités (patché)
             ├── events.py                  ← Événements (patché)
             ├── wellness.py                ← Bien-être (patché)
+            ├── sheets.py                  ← Export Google Sheets
             └── ...
 ```
