@@ -236,7 +236,9 @@ async def export_session_to_sheet(
     raw_intervals: list[dict] = (
         intervals_result.get("icu_intervals", []) if isinstance(intervals_result, dict) else []
     )
-    work_intervals = _parse_work_intervals(raw_intervals, activity.get("name", ""))
+    act_title = activity.get("name", "")
+    nx_parsed = _extract_nx(act_title)
+    work_intervals = _parse_work_intervals(raw_intervals, act_title)
 
     # Open Sheet and read headers from row 1
     try:
@@ -263,10 +265,12 @@ async def export_session_to_sheet(
     ws.append_row(row, value_input_option="USER_ENTERED")
 
     act_name = activity.get("name") or activity_id
+    nx_debug = f"N={nx_parsed[0]}, durée={nx_parsed[1]//60}min" if nx_parsed else "non détecté (fallback clustering)"
     col = {h.lower().strip(): v for h, v in zip(headers, row)}
     return (
         f"✅ Ligne ajoutée dans '{sheet_tab}' :\n"
         f"  Séance     : {act_name}\n"
+        f"  Titre parsé: {nx_debug}\n"
         f"  Date       : {col.get('date', '?')}\n"
         f"  Intervalles: {col.get('intervalles', '?')}\n"
         f"  Volume     : {col.get('volume total', '?')}\n"
