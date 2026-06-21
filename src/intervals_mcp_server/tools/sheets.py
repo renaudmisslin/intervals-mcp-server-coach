@@ -40,13 +40,34 @@ def _get_worksheet(tab_name: str = "Feuille 1"):
 
 
 def _parse_work_intervals(icu_intervals: list[dict]) -> list[dict]:
-    """Keep only effort intervals — exclude rest/warmup/cooldown/overall."""
+    """Detect the main set intervals via duration clustering.
+
+    Filters out warmup/cooldown/rest by type, then clusters remaining intervals
+    by duration and returns the dominant cluster (the repeated block). This avoids
+    including warm-up or cool-down efforts that happen to share the 'Work' type label.
+    """
+    from collections import Counter
+
     excluded = {"rest", "active recovery", "recovery", "warmup", "cooldown", ""}
-    return [
+    candidates = [
         iv for iv in icu_intervals
         if (iv.get("type") or "").lower().strip() not in excluded
-        and iv.get("elapsed_time", 0) > 60  # ignore very short intervals < 1 min
+        and iv.get("elapsed_time", 0) > 60
     ]
+
+    if len(candidates) <= 1:
+        return candidates
+
+    # Cluster by nearest-minute bucket; the main set intervals share a similar duration
+    def _bucket(iv: dict) -> int:
+        return round(iv.get("elapsed_time", 0) / 60) * 60
+
+    counts = Counter(_bucket(iv) for iv in candidates)
+    dominant = counts.most_common(1)[0][0]
+
+    # Accept intervals within ±25% of the dominant bucket (min ±60 s)
+    tolerance = max(dominant * 0.25, 60)
+    return [iv for iv in candidates if abs(iv.get("elapsed_time", 0) - dominant) <= tolerance]
 
 
 def _format_intervals_label(work_intervals: list[dict]) -> str:
