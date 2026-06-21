@@ -138,13 +138,10 @@ def _build_row(
     is_indoor = activity.get("indoor") or activity.get("trainer") or activity.get("virtual_run")
     env = "HT" if is_indoor else "Ext"
 
-    # Volume total: prefer distance (km), fall back to elapsed time (min)
-    dist_m = activity.get("distance") or 0
-    if dist_m > 0:
-        volume = f"{dist_m / 1000:.1f} km"
-    else:
-        secs = activity.get("moving_time") or activity.get("elapsed_time") or 0
-        volume = f"{round(secs / 60)} min"
+    # Volume total: toujours en temps (h:mm)
+    secs = activity.get("moving_time") or activity.get("elapsed_time") or 0
+    h, m = divmod(round(secs / 60), 60)
+    volume = f"{h}h{m:02d}" if h else f"{m} min"
 
     # Intervals label
     intervalles = _format_intervals_label(work_intervals)
@@ -164,7 +161,7 @@ def _build_row(
     temp = activity.get("average_temp")
     if temp is None and work_intervals:
         temps = [iv.get("average_temp") for iv in work_intervals if iv.get("average_temp") is not None]
-        temp = round(sum(temps) / len(temps), 1) if temps else None
+        temp = round(sum(temps) / len(temps)) if temps else None
 
     mapping: dict[str, str] = {
         "date": date,
