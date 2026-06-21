@@ -256,9 +256,13 @@ async def export_session_to_sheet(
     if not work_intervals:
         no_intervals_warning = (
             "\n⚠️  Aucun intervalle de travail détecté — colonnes Intervalles, Volume, "
-            "Watts moy, FC moy et Efficacité laissées vides. "
-            "Vérifiez que le titre contient un pattern NxM (ex: '3x20min') "
-            "et que l'activité a des données d'intervalles sur Intervals.icu."
+            "Watts moy, FC moy et Efficacité laissées vides.\n"
+            "Cause probable : les intervalles ne sont pas définis sur cette activité dans Intervals.icu.\n"
+            "Solutions :\n"
+            "  1. Sur intervals.icu, ouvre l'activité → vérifie qu'il y a des intervalles visibles\n"
+            "  2. Si non : crée-les manuellement (icône ciseaux) ou relance l'analyse automatique\n"
+            "  3. Une fois les intervalles présents, relance l'export\n"
+            "Vérification secondaire : le titre doit contenir un pattern NxM (ex: '3x20min')"
         )
 
     row = _build_row(headers, activity, work_intervals, ventilation)

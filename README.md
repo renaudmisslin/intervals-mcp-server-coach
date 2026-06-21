@@ -401,6 +401,25 @@ To find the activity ID, ask:
 
 > *"Show me the last 5 activities for renaud"* — each line ends with `(id:abc123)`
 
+### Troubleshooting: empty columns (Intervalles, Watts moy, FC moy…)
+
+**Symptom:** the row is added but interval-related columns are blank, and Claude warns that no work intervals were detected.
+
+**Most likely cause: the activity has no intervals defined on Intervals.icu.**
+
+Intervals.icu only exposes interval data if they have been created for that activity — either automatically detected by the platform or added manually.
+
+**Fix:**
+
+1. Open the activity on intervals.icu
+2. Check whether intervals are visible in the activity view (coloured blocks on the effort graph)
+3. If not:
+   - Use the scissors icon to **create intervals manually** by selecting the effort blocks
+   - Or click **"Analyse"** if Intervals.icu offers automatic detection for that activity
+4. Once intervals are visible, re-run the export
+
+**Secondary check:** the activity title must contain a `NxM` pattern (e.g. `3x20min`, `6 x 20'`) so the tool knows how many intervals to look for and what duration to expect. Suffixes like `PL`, `ext`, `HT` are ignored.
+
 ---
 
 ## Adding a new Sheets export tool
