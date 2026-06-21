@@ -166,7 +166,9 @@ def _build_row(
     temp = activity.get("average_temp")
     if temp is None and work_intervals:
         temps = [iv.get("average_temp") for iv in work_intervals if iv.get("average_temp") is not None]
-        temp = round(sum(temps) / len(temps)) if temps else None
+        temp = sum(temps) / len(temps) if temps else None
+    if temp is not None:
+        temp = round(temp)
 
     mapping: dict[str, str] = {
         "date": date,
