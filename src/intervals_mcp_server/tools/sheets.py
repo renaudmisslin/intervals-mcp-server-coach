@@ -144,9 +144,7 @@ def _build_row(
         wh, wm = divmod(round(work_secs / 60), 60)
         volume = f"{wh}h{wm:02d}" if wh else f"{wm} min"
     else:
-        secs = activity.get("moving_time") or activity.get("elapsed_time") or 0
-        wh, wm = divmod(round(secs / 60), 60)
-        volume = f"{wh}h{wm:02d}" if wh else f"{wm} min"
+        volume = ""
 
     # Intervals label
     intervalles = _format_intervals_label(work_intervals)
@@ -251,6 +249,15 @@ async def export_session_to_sheet(
     if not headers:
         return "La ligne 1 du Sheet est vide — impossible de lire les en-têtes."
 
+    no_intervals_warning = ""
+    if not work_intervals:
+        no_intervals_warning = (
+            "\n⚠️  Aucun intervalle de travail détecté — colonnes Intervalles, Volume, "
+            "Watts moy, FC moy et Efficacité laissées vides. "
+            "Vérifiez que le titre contient un pattern NxM (ex: '3x20min') "
+            "et que l'activité a des données d'intervalles sur Intervals.icu."
+        )
+
     row = _build_row(headers, activity, work_intervals, ventilation)
     ws.append_row(row, value_input_option="USER_ENTERED")
 
@@ -267,4 +274,5 @@ async def export_session_to_sheet(
         f"  FC moy     : {col.get('fc moy', '?')}\n"
         f"  Efficacité : {col.get('efficacité', '?')}\n"
         f"  T° moy     : {col.get('t° moy', '?')}"
+        f"{no_intervals_warning}"
     )
