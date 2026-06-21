@@ -88,13 +88,14 @@ def _parse_work_intervals(icu_intervals: list[dict], activity_title: str = "") -
                 break
 
         if matched:
-            # Take the N most intense intervals (highest average watts)
+            # Select the N most intense, then restore chronological order
             by_watts = sorted(
                 matched,
                 key=lambda iv: iv.get("average_watts") or iv.get("avg_watts") or 0,
                 reverse=True,
             )
-            return by_watts[:n]
+            selected = by_watts[:n]
+            return sorted(selected, key=lambda iv: iv.get("start_index", 0))
 
     # --- Strategy 2: duration clustering fallback ---
     if len(candidates) == 1:
