@@ -305,63 +305,72 @@ Once the server is running and Claude Desktop is configured, you can use the fol
 
 ## Export to Google Sheets
 
-The `export_session_to_sheet` tool appends one row per training session into a Google Sheet. It reads column headers dynamically from the sheet, fetches activity + interval data from Intervals.icu, and fills in the mapped values automatically.
+The `export_session_to_sheet` tool lets you ask Claude to populate a row in a Google Sheet from an Intervals.icu training session. It reads the column headers from row 1 of the sheet at runtime, so you can add, remove, or reorder columns without touching any code.
 
-**Columns supported** (any subset, in any order — the tool reads headers from row 1):
+### What gets exported
 
-| Column header (row 1) | Source |
-|-----------------------|--------|
-| `Date` | Session date from Intervals.icu |
-| `Intervalles` | Detected interval structure, e.g. `3 x 20'` |
-| `Volume total` | Distance (km) or duration (min) for indoor sessions |
-| `Environnement` | `HT` (indoor / trainer) or `Ext` (outdoor) |
-| `Ventilation` | Parameter passed at call time (default: `bouche`) |
+| Column header (row 1) | Content |
+|-----------------------|---------|
+| `Date` | Session date |
+| `Intervalles` | Detected block structure, e.g. `3 x 20'` |
+| `Volume total` | Total work time (N × block duration), e.g. `1h00` |
+| `Environnement` | `HT` (indoor / home trainer) or `Ext` (outdoor) |
+| `Ventilation` | Value passed at call time (default: `bouche`) |
 | `Watts moy` | Avg power per work interval, e.g. `270-271-269` |
 | `FC moy` | Avg heart rate per work interval, e.g. `145-146-142` |
 | `Efficacité` | Efficiency Factor (watts ÷ HR) per interval, e.g. `1.86-1.87` |
-| `T° moy` | Average temperature |
+| `T° moy` | Average temperature (°C, rounded to nearest integer) |
 
-> Any column header not in this list is left blank. You can reorder or remove columns freely — the tool reads the actual headers at runtime.
+Any header not in this list is left blank. Column order is free.
+
+**Prerequisites on the activity title:** the title must contain a `NxM` pattern (e.g. `3x20min`, `6 x 20'`, `3x20min PL ext`) so the tool knows how many intervals to expect and their target duration. Suffixes like `PL`, `ext`, `HT` are ignored.
+
+---
 
 ### One-time setup: Google Service Account
 
-This is a one-time setup. **Claude can guide you through each step** — just ask: *"Guide me through the Google Sheets setup for the MCP server"*.
+> **Claude can guide you through every step interactively.** Just say: *"Guide me through the Google Sheets setup"* and follow the prompts.
 
 #### Step 1 — Google Cloud Console
 
-Go to https://console.cloud.google.com and select or create a project (any name).
+Go to https://console.cloud.google.com → select or create a project (any name).
 
-**Verify:** You can see the project name in the top bar.
+✅ **Verify:** project name visible in the top bar.
 
-#### Step 2 — Enable Google Sheets API
+#### Step 2 — Enable the Google Sheets API
 
-In the left menu: **APIs & Services → Library → search "Google Sheets API" → Enable**.
+Left menu → **APIs & Services → Library** → search **"Google Sheets API"** → **Enable**.
 
-**Verify:** The API status shows "Enabled" on its page.
+✅ **Verify:** API status shows "Enabled".
 
 #### Step 3 — Create a Service Account
 
 **APIs & Services → Credentials → Create Credentials → Service Account**
 
-- Name: `intervals-mcp-sheets` (or any name)
-- Skip the role and user access steps (click Continue / Done)
+- When asked what data you access, choose **"Application data"** (creates a Service Account, not OAuth)
+- Name: `intervals-mcp-sheets` (or anything)
+- Skip role assignment — click Continue / Done
 
-**Verify:** The service account appears in the Credentials list with an email like `intervals-mcp-sheets@your-project.iam.gserviceaccount.com`.
+✅ **Verify:** the service account appears in the Credentials list with an email ending in `.iam.gserviceaccount.com`.
 
 #### Step 4 — Download the credentials JSON
 
-Click the service account → **Keys tab → Add Key → Create new key → JSON → Create**.
+Click the service account email → **Keys tab → Add Key → Create new key → JSON → Create**.
 
-A JSON file downloads automatically. Rename it `sheets_credentials.json` and place it at the root of this project:
+A file downloads automatically. Move it to the project root and name it `sheets_credentials.json`:
 
 ```
 intervals-mcp-server-git/
-└── sheets_credentials.json   ← here
+└── sheets_credentials.json   ← here (already in .gitignore, never committed)
 ```
 
-> This file is already in `.gitignore` — it will never be committed.
+**Windows (PowerShell):**
+```powershell
+Move-Item "$env:USERPROFILE\Downloads\<downloaded-file>.json" `
+  "C:\Users\<USERNAME>\intervals-mcp-server-git\sheets_credentials.json"
+```
 
-**Verify (PowerShell):**
+✅ **Verify:**
 ```powershell
 Test-Path "C:\Users\<USERNAME>\intervals-mcp-server-git\sheets_credentials.json"
 # Should print: True
@@ -369,56 +378,84 @@ Test-Path "C:\Users\<USERNAME>\intervals-mcp-server-git\sheets_credentials.json"
 
 #### Step 5 — Share your Google Sheet with the service account
 
-1. Open `sheets_credentials.json` and copy the `client_email` value (looks like `intervals-mcp-sheets@...iam.gserviceaccount.com`)
-2. Open your Google Sheet → **Share** → paste the email → role **Editor** → Send
+Get the service account email from the credentials file:
+```powershell
+(Get-Content "C:\Users\<USERNAME>\intervals-mcp-server-git\sheets_credentials.json" | ConvertFrom-Json).client_email
+```
 
-**Verify:** The service account email appears in the sheet's sharing list.
+Open your Google Sheet → **Share** → paste the email → role **Editor** → Send.
 
-#### Step 6 — Install dependencies and restart
+✅ **Verify:** the email appears in the sheet's sharing list.
+
+#### Step 6 — Install dependencies and restart Claude Code
 
 ```powershell
 cd C:\Users\<USERNAME>\intervals-mcp-server-git
 uv sync
 ```
 
-Then restart Claude Code so the new tool is loaded.
+If `uv sync` fails because the server is running (file locked), install directly:
+```powershell
+uv pip install --python .venv\Scripts\python.exe gspread google-auth
+```
 
-**Verify:** Ask Claude *"Which tools do you have for Google Sheets?"* — it should mention `export_session_to_sheet`.
+Restart Claude Code, then open a new conversation.
+
+✅ **Verify:** ask Claude *"Which tools do you have for Google Sheets?"* — it should mention `export_session_to_sheet`.
+
+---
 
 ### Usage
 
-Once setup is done, tell Claude:
+**Step 1 — Find the activity ID**
 
-> *"Export session [activity_id] for renaud to the sheet"*
+> *"Show me the last 5 activities for renaud"*
 
-Or with a ventilation override:
+Each line ends with `(id:abc123)` — copy the ID of the session you want to export.
 
-> *"Export session [activity_id] for renaud, ventilation=nez"*
+**Step 2 — Export**
 
-Claude calls `export_session_to_sheet(athlete_name="renaud", activity_id="...", ventilation="bouche")` and confirms the row that was added.
+> *"Export session i158637477 for renaud to the sheet tab 'renaud'"*
 
-To find the activity ID, ask:
+Optional: specify ventilation if different from the default (`bouche`):
 
-> *"Show me the last 5 activities for renaud"* — each line ends with `(id:abc123)`
+> *"Export session i158637477 for renaud, ventilation nez, tab renaud"*
 
-### Troubleshooting: empty columns (Intervalles, Watts moy, FC moy…)
+Claude confirms what was written:
+```
+✅ Row added to 'renaud':
+  Séance     : LT1 6x20min
+  Titre parsé: N=6, durée=20min
+  Date       : 2026-06-19
+  Intervalles: 6 x 20'
+  Volume     : 2h00
+  Env        : Ext | Ventilation : bouche
+  Watts moy  : 265-268-271-270-269-272
+  FC moy     : 138-141-143-142-141-144
+  Efficacité : 1.92-1.90-1.89-1.90-1.91-1.89
+  T° moy     : 18
+```
 
-**Symptom:** the row is added but interval-related columns are blank, and Claude warns that no work intervals were detected.
+---
+
+### Troubleshooting: interval columns are blank
+
+**Symptom:** the row is added but Intervalles, Volume, Watts moy, FC moy and Efficacité are empty. Claude warns that no work intervals were detected.
 
 **Most likely cause: the activity has no intervals defined on Intervals.icu.**
 
-Intervals.icu only exposes interval data if they have been created for that activity — either automatically detected by the platform or added manually.
+Intervals.icu only exposes interval data when intervals have been created for that activity — either detected automatically by the platform, or added manually.
 
 **Fix:**
 
 1. Open the activity on intervals.icu
-2. Check whether intervals are visible in the activity view (coloured blocks on the effort graph)
+2. Check if coloured interval blocks are visible on the effort graph
 3. If not:
-   - Use the scissors icon to **create intervals manually** by selecting the effort blocks
-   - Or click **"Analyse"** if Intervals.icu offers automatic detection for that activity
+   - Click the **scissors icon** to create intervals manually by selecting the effort blocks on the graph
+   - Or click **"Analyse"** if the platform offers automatic detection
 4. Once intervals are visible, re-run the export
 
-**Secondary check:** the activity title must contain a `NxM` pattern (e.g. `3x20min`, `6 x 20'`) so the tool knows how many intervals to look for and what duration to expect. Suffixes like `PL`, `ext`, `HT` are ignored.
+**Secondary check:** confirm the title contains a `NxM` pattern — the "Titre parsé" line in Claude's response shows what was detected (`N=3, durée=20min` or `non détecté`).
 
 ---
 
