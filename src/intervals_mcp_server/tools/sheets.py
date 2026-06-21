@@ -7,6 +7,7 @@ Credentials JSON must be placed at the project root as sheets_credentials.json.
 
 import asyncio
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +40,26 @@ def _get_worksheet(tab_name: str = "Feuille 1"):
         return sh.sheet1
 
 
-def _parse_work_intervals(icu_intervals: list[dict]) -> list[dict]:
-    """Detect the main set intervals via duration clustering.
+def _extract_nx(title: str) -> tuple[int, int] | None:
+    """Parse 'NxM' or 'N x M' pattern from activity title.
 
-    Filters out warmup/cooldown/rest by type, then clusters remaining intervals
-    by duration and returns the dominant cluster (the repeated block). This avoids
-    including warm-up or cool-down efforts that happen to share the 'Work' type label.
+    Returns (n, duration_seconds) or None if not found.
+    Handles: '6x20min', '3 x 20'', 'LT1 6x20min', '6×20mn', etc.
+    """
+    match = re.search(r"(\d+)\s*[x×]\s*(\d+)\s*(min|mn|'|m)?", title, re.IGNORECASE)
+    if match:
+        return int(match.group(1)), int(match.group(2)) * 60
+    return None
+
+
+def _parse_work_intervals(icu_intervals: list[dict], activity_title: str = "") -> list[dict]:
+    """Detect main-set intervals using the activity title when possible.
+
+    Strategy 1 (title): if title contains 'NxM' (e.g. '6x20min'), filter intervals
+    whose moving_time ≈ M ± 20%, then take the N most intense (highest avg watts).
+    Widens to ±40% if fewer than N are found at ±20%.
+
+    Strategy 2 (fallback): duration clustering — returns the dominant repeated block.
     """
     from collections import Counter
 
@@ -55,17 +70,41 @@ def _parse_work_intervals(icu_intervals: list[dict]) -> list[dict]:
         and iv.get("elapsed_time", 0) > 60
     ]
 
-    if len(candidates) <= 1:
+    if not candidates:
+        return []
+
+    # --- Strategy 1: use NxM from title ---
+    nx = _extract_nx(activity_title)
+    if nx:
+        n, target_sec = nx
+
+        def _moving(iv: dict) -> int:
+            return iv.get("moving_time") or iv.get("elapsed_time") or 0
+
+        for tolerance_pct in (0.20, 0.40):
+            tol = target_sec * tolerance_pct
+            matched = [iv for iv in candidates if abs(_moving(iv) - target_sec) <= tol]
+            if len(matched) >= n:
+                break
+
+        if matched:
+            # Take the N most intense intervals (highest average watts)
+            by_watts = sorted(
+                matched,
+                key=lambda iv: iv.get("average_watts") or iv.get("avg_watts") or 0,
+                reverse=True,
+            )
+            return by_watts[:n]
+
+    # --- Strategy 2: duration clustering fallback ---
+    if len(candidates) == 1:
         return candidates
 
-    # Cluster by nearest-minute bucket; the main set intervals share a similar duration
     def _bucket(iv: dict) -> int:
         return round(iv.get("elapsed_time", 0) / 60) * 60
 
     counts = Counter(_bucket(iv) for iv in candidates)
     dominant = counts.most_common(1)[0][0]
-
-    # Accept intervals within ±25% of the dominant bucket (min ±60 s)
     tolerance = max(dominant * 0.25, 60)
     return [iv for iv in candidates if abs(iv.get("elapsed_time", 0) - dominant) <= tolerance]
 
@@ -193,7 +232,7 @@ async def export_session_to_sheet(
     raw_intervals: list[dict] = (
         intervals_result.get("icu_intervals", []) if isinstance(intervals_result, dict) else []
     )
-    work_intervals = _parse_work_intervals(raw_intervals)
+    work_intervals = _parse_work_intervals(raw_intervals, activity.get("name", ""))
 
     # Open Sheet and read headers from row 1
     try:
