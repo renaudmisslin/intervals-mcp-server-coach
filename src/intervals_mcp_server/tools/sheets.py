@@ -131,26 +131,23 @@ def _build_row(
     work_intervals: list[dict],
     ventilation: str,
     activity_id: str = "",
-) -> list[str]:
-    """Map activity + interval data to a row aligned with Sheet headers."""
-    # Date — clickable link to the Intervals.icu activity page
+) -> tuple[list[str], str, str]:
+    """Map activity + interval data to a row aligned with Sheet headers.
+
+    Returns (row, date_str, activity_url) so the caller can set the hyperlink
+    via the Sheets API instead of a locale-dependent HYPERLINK formula.
+    """
+    # Date (plain text — hyperlink set separately via API)
     date_str = (activity.get("start_date_local") or activity.get("start_date") or "")[:10]
-    if activity_id:
-        date = f'=HYPERLINK("https://intervals.icu/activities/{activity_id}","{date_str}")'
-    else:
-        date = date_str
+    activity_url = f"https://intervals.icu/activities/{activity_id}" if activity_id else ""
 
     # Environnement: indoor/trainer → HT, else Ext
     is_indoor = activity.get("indoor") or activity.get("trainer") or activity.get("virtual_run")
     env = "HT" if is_indoor else "Ext"
 
-    # Volume total = somme du moving_time des intervalles de travail (N × durée bloc)
+    # Volume total = total work time in minutes (N × bloc duration)
     work_secs = sum(iv.get("moving_time") or iv.get("elapsed_time") or 0 for iv in work_intervals)
-    if work_secs > 0:
-        wh, wm = divmod(round(work_secs / 60), 60)
-        volume = f"{wh}h{wm:02d}" if wh else f"{wm} min"
-    else:
-        volume = ""
+    volume = f"{round(work_secs / 60)} min" if work_secs > 0 else ""
 
     # Intervals label
     intervalles = _format_intervals_label(work_intervals)
@@ -175,7 +172,7 @@ def _build_row(
         temp = round(temp)
 
     mapping: dict[str, str] = {
-        "date": date,
+        "date": date_str,
         "intervalles": intervalles,
         "volume total": volume,
         "environnement": env,
@@ -186,7 +183,7 @@ def _build_row(
         "t° moy": str(temp) if temp is not None else "",
     }
 
-    return [mapping.get(h.lower().strip(), "") for h in headers]
+    return [mapping.get(h.lower().strip(), "") for h in headers], date_str, activity_url
 
 
 @mcp.tool()
@@ -270,8 +267,25 @@ async def export_session_to_sheet(
             "Vérification secondaire : le titre doit contenir un pattern NxM (ex: '3x20min')"
         )
 
-    row = _build_row(headers, activity, work_intervals, ventilation, activity_id)
+    row, date_str, activity_url = _build_row(headers, activity, work_intervals, ventilation, activity_id)
     ws.append_row(row, value_input_option="USER_ENTERED")
+
+    # Set hyperlink on the Date cell via Sheets API (locale-independent, no formula)
+    date_col_idx = next((i for i, h in enumerate(headers) if h.lower().strip() == "date"), None)
+    if date_col_idx is not None and activity_url:
+        last_row = len(ws.get_all_values())
+        ws.spreadsheet.batch_update({"requests": [{"updateCells": {
+            "range": {
+                "sheetId": ws.id,
+                "startRowIndex": last_row - 1,
+                "endRowIndex": last_row,
+                "startColumnIndex": date_col_idx,
+                "endColumnIndex": date_col_idx + 1,
+            },
+            "rows": [{"values": [{"userEnteredValue": {"stringValue": date_str},
+                                   "userEnteredFormat": {"textFormat": {"link": {"uri": activity_url}}}}]}],
+            "fields": "userEnteredValue,userEnteredFormat.textFormat.link",
+        }}]})
 
     act_name = activity.get("name") or activity_id
     nx_debug = f"N={nx_parsed[0]}, durée={nx_parsed[1]//60}min" if nx_parsed else "non détecté (fallback clustering)"
