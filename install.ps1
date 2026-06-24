@@ -1,50 +1,79 @@
 #Requires -Version 5.1
 Add-Type -AssemblyName System.Windows.Forms
 
-$RepoUrl    = "https://github.com/renaudmisslin/intervals-mcp-server-coach.git"
-$InstallDir = Join-Path $env:USERPROFILE "intervals-mcp-server-coach"
-$ClaudeConfig = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
+# ==========================================================
+#  MCP Coach Intervals.icu - Script d'installation Windows
+#  Base : https://github.com/hhopke/intervals-icu-mcp
+#  Modifie par : Renaud Misslin <renaud.misslin@gmail.com>
+# ==========================================================
 
-function Show-Step($msg) { Write-Host "`n>>> $msg" -ForegroundColor Cyan }
-function Show-OK($msg)   { Write-Host "    [OK] $msg" -ForegroundColor Green }
-function Show-Err($msg)  { Write-Host "    [ERREUR] $msg" -ForegroundColor Red }
-function Has-Cmd($cmd)   { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
+$RepoUrl      = "https://github.com/renaudmisslin/intervals-mcp-server-coach.git"
+$InstallDir   = Join-Path $env:USERPROFILE "intervals-mcp-server-coach"
+$ClaudeConfig = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
+$TotalSteps   = 7
+$Step         = 0
+
+function Next-Step($label) {
+    $script:Step++
+    Write-Progress -Activity "Installation MCP Coach Intervals.icu" `
+                   -Status "Etape $script:Step / $TotalSteps : $label" `
+                   -PercentComplete ([int](($script:Step - 1) / $TotalSteps * 100))
+    Write-Host "`n>>> [$script:Step/$TotalSteps] $label" -ForegroundColor Cyan
+}
+
+function Done-Step($msg) {
+    Write-Progress -Activity "Installation MCP Coach Intervals.icu" `
+                   -Status "Etape $script:Step / $TotalSteps : OK" `
+                   -PercentComplete ([int]($script:Step / $TotalSteps * 100))
+    Write-Host "    [OK] $msg" -ForegroundColor Green
+}
+
+function Fail-Step($msg) {
+    Write-Progress -Activity "Installation MCP Coach Intervals.icu" -Completed
+    Write-Host "    [ERREUR] $msg" -ForegroundColor Red
+    Read-Host "Appuyez sur Entree pour fermer"
+    exit 1
+}
+
+function Has-Cmd($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
 function Install-Winget($id, $name) {
-    if (-not (Has-Cmd "winget")) { Show-Err "winget non disponible. Installez $name manuellement."; return }
-    Write-Host "    Installation de $name..." -ForegroundColor Yellow
+    if (-not (Has-Cmd "winget")) { Fail-Step "winget non disponible. Installez $name manuellement." }
+    Write-Host "    Telechargement et installation de $name..." -ForegroundColor Yellow
     winget install --id $id --silent --accept-source-agreements --accept-package-agreements | Out-Null
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
                 [System.Environment]::GetEnvironmentVariable("PATH","User")
 }
 
 Clear-Host
-Write-Host "===========================================================" -ForegroundColor Blue
-Write-Host "  Installation MCP Coach Intervals.icu - Claude Desktop" -ForegroundColor Blue
-Write-Host "===========================================================" -ForegroundColor Blue
+Write-Host ""
+Write-Host "  MCP Coach Intervals.icu - Installation automatique" -ForegroundColor Blue
+Write-Host "  Base sur : https://github.com/hhopke/intervals-icu-mcp" -ForegroundColor DarkGray
+Write-Host "  Modifie par : Renaud Misslin <renaud.misslin@gmail.com>" -ForegroundColor DarkGray
+Write-Host ""
 
-# --- Python ---
-Show-Step "Verification de Python..."
+# --- 1. Python ---
+Next-Step "Verification de Python"
 if (Has-Cmd "python") {
-    Show-OK ("Python : " + (python --version 2>&1))
+    Done-Step ("Python deja installe : " + (python --version 2>&1))
 } else {
     Install-Winget "Python.Python.3.12" "Python 3.12"
-    if (-not (Has-Cmd "python")) { Show-Err "Python introuvable. Relancez le script."; Read-Host; exit 1 }
-    Show-OK "Python installe."
+    if (-not (Has-Cmd "python")) { Fail-Step "Python introuvable apres installation. Relancez le script." }
+    Done-Step "Python installe."
 }
 
-# --- Git ---
-Show-Step "Verification de Git..."
+# --- 2. Git ---
+Next-Step "Verification de Git"
 if (Has-Cmd "git") {
-    Show-OK "Git deja installe."
+    Done-Step "Git deja installe."
 } else {
     Install-Winget "Git.Git" "Git"
-    if (-not (Has-Cmd "git")) { Show-Err "Git introuvable. Relancez le script."; Read-Host; exit 1 }
-    Show-OK "Git installe."
+    if (-not (Has-Cmd "git")) { Fail-Step "Git introuvable apres installation. Relancez le script." }
+    Done-Step "Git installe."
 }
 
-# --- uv ---
-Show-Step "Verification de uv..."
+# --- 3. uv ---
+Next-Step "Verification de uv"
 $uvPath = $null
 foreach ($p in @("uv", "$env:USERPROFILE\.local\bin\uv.exe", "$env:USERPROFILE\.cargo\bin\uv.exe")) {
     if (Has-Cmd $p) { $uvPath = (Get-Command $p).Source; break }
@@ -56,50 +85,56 @@ if (-not $uvPath) {
     foreach ($p in @("uv", "$env:USERPROFILE\.local\bin\uv.exe")) {
         if (Has-Cmd $p) { $uvPath = (Get-Command $p).Source; break }
     }
-    if (-not $uvPath) { Show-Err "uv introuvable. Relancez le script."; Read-Host; exit 1 }
+    if (-not $uvPath) { Fail-Step "uv introuvable apres installation. Relancez le script." }
 }
-Show-OK "uv : $uvPath"
+Done-Step "uv : $uvPath"
 
-# --- Clone ---
-Show-Step "Telechargement du projet..."
+# --- 4. Clone / mise a jour ---
+Next-Step "Telechargement du projet depuis GitHub"
 if (Test-Path (Join-Path $InstallDir ".git")) {
+    Write-Host "    Mise a jour du projet existant..." -ForegroundColor Yellow
     git -C $InstallDir pull --quiet
-    Show-OK "Projet mis a jour : $InstallDir"
+    Done-Step "Projet mis a jour : $InstallDir"
 } else {
+    Write-Host "    Clonage en cours..." -ForegroundColor Yellow
     git clone $RepoUrl $InstallDir --quiet
-    Show-OK "Projet clone : $InstallDir"
+    Done-Step "Projet telecharge : $InstallDir"
 }
 
-# --- uv sync ---
-Show-Step "Installation des dependances Python..."
-& $uvPath sync --project $InstallDir --quiet
-Show-OK "Dependances installees."
+# --- 5. Dependances Python ---
+Next-Step "Installation des dependances Python (premiere fois : 1-2 minutes)"
+Write-Host "    Installation en cours, merci de patienter..." -ForegroundColor Yellow
+& $uvPath sync --project $InstallDir
+Done-Step "Dependances installees."
 
-# --- Popup credentials ---
-Show-Step "Configuration des identifiants Intervals.icu..."
+# --- 6. Credentials ---
+Next-Step "Configuration des identifiants Intervals.icu"
+Write-Host "    Une fenetre pop-up va s'afficher. Completez-la avec votre cle API et votre Athlete ID." -ForegroundColor Yellow
+Write-Host "    Ces informations se trouvent sur intervals.icu > Settings > API" -ForegroundColor Yellow
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Configuration MCP Coach Intervals.icu"
-$form.Size = New-Object System.Drawing.Size(480, 290)
+$form.Size = New-Object System.Drawing.Size(500, 300)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
+$form.TopMost = $true
 
 $lbl1 = New-Object System.Windows.Forms.Label
 $lbl1.Text = "Cle API coach  (intervals.icu > Settings > API)"
 $lbl1.Location = New-Object System.Drawing.Point(20, 20)
-$lbl1.Size = New-Object System.Drawing.Size(440, 20)
+$lbl1.Size = New-Object System.Drawing.Size(460, 20)
 $form.Controls.Add($lbl1)
 
 $txtKey = New-Object System.Windows.Forms.TextBox
 $txtKey.Location = New-Object System.Drawing.Point(20, 45)
-$txtKey.Size = New-Object System.Drawing.Size(440, 25)
+$txtKey.Size = New-Object System.Drawing.Size(460, 25)
 $form.Controls.Add($txtKey)
 
 $lbl2 = New-Object System.Windows.Forms.Label
-$lbl2.Text = "Votre Athlete ID  (meme page, commence par 'i')"
+$lbl2.Text = "Votre Athlete ID  (meme page, commence par 'i', ex: i170109)"
 $lbl2.Location = New-Object System.Drawing.Point(20, 90)
-$lbl2.Size = New-Object System.Drawing.Size(440, 20)
+$lbl2.Size = New-Object System.Drawing.Size(460, 20)
 $form.Controls.Add($lbl2)
 
 $txtId = New-Object System.Windows.Forms.TextBox
@@ -108,15 +143,15 @@ $txtId.Size = New-Object System.Drawing.Size(200, 25)
 $form.Controls.Add($txtId)
 
 $lblInfo = New-Object System.Windows.Forms.Label
-$lblInfo.Text = "Vos athletes coaches seront detectes automatiquement."
+$lblInfo.Text = "Vos athletes coaches seront detectes automatiquement depuis intervals.icu."
 $lblInfo.Location = New-Object System.Drawing.Point(20, 160)
-$lblInfo.Size = New-Object System.Drawing.Size(440, 20)
+$lblInfo.Size = New-Object System.Drawing.Size(460, 20)
 $lblInfo.ForeColor = [System.Drawing.Color]::DarkGray
 $form.Controls.Add($lblInfo)
 
 $btn = New-Object System.Windows.Forms.Button
 $btn.Text = "Valider"
-$btn.Location = New-Object System.Drawing.Point(340, 210)
+$btn.Location = New-Object System.Drawing.Point(360, 215)
 $btn.Size = New-Object System.Drawing.Size(120, 30)
 $btn.DialogResult = [System.Windows.Forms.DialogResult]::OK
 $form.AcceptButton = $btn
@@ -127,21 +162,19 @@ $dlg = $form.ShowDialog()
 if ($dlg -ne [System.Windows.Forms.DialogResult]::OK -or
     [string]::IsNullOrWhiteSpace($txtKey.Text) -or
     [string]::IsNullOrWhiteSpace($txtId.Text)) {
-    Show-Err "Configuration incomplete. Relancez le script."
-    Read-Host; exit 1
+    Fail-Step "Configuration incomplete. Relancez le script."
 }
 
 $apiKey    = $txtKey.Text.Trim()
 $athleteId = $txtId.Text.Trim()
 
-# --- .env ---
-Show-Step "Ecriture du fichier .env..."
 "INTERVALS_ICU_API_KEY=$apiKey`nINTERVALS_ICU_ATHLETE_ID=$athleteId" |
     Set-Content -Path (Join-Path $InstallDir ".env") -Encoding utf8
-Show-OK ".env cree."
+Done-Step ".env cree."
 
-# --- Claude Desktop config ---
-Show-Step "Configuration de Claude Desktop..."
+# --- 7. Claude Desktop ---
+Next-Step "Configuration de Claude Desktop"
+
 $claudeDir = Split-Path $ClaudeConfig
 if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Force $claudeDir | Out-Null }
 
@@ -161,10 +194,7 @@ if (Test-Path $ClaudeConfig) {
     [PSCustomObject]@{ mcpServers = [PSCustomObject]@{ "intervals-coach" = $mcpBlock } } |
         ConvertTo-Json -Depth 10 | Set-Content $ClaudeConfig -Encoding utf8
 }
-Show-OK "Claude Desktop configure."
 
-# --- Claude Desktop present ? ---
-Show-Step "Verification de Claude Desktop..."
 $found = Get-ChildItem "$env:LOCALAPPDATA\AnthropicClaude" -Filter "claude.exe" -Recurse -ErrorAction SilentlyContinue |
          Select-Object -First 1
 if (-not $found) {
@@ -177,9 +207,10 @@ if (-not $found) {
         [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
     exit 0
 }
-Show-OK "Claude Desktop detecte."
+Done-Step "Claude Desktop configure."
 
-# --- Fin ---
+Write-Progress -Activity "Installation MCP Coach Intervals.icu" -Completed
+
 [System.Windows.Forms.MessageBox]::Show(
     "Installation terminee !`n`nRedemarrez Claude Desktop puis tapez :`n`n  Quels athletes est-ce que je coache ?",
     "MCP Coach installe",
