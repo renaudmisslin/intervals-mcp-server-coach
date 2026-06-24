@@ -195,7 +195,7 @@ if (Test-Path $ClaudeConfig) {
         ConvertTo-Json -Depth 10 | Set-Content $ClaudeConfig -Encoding utf8
 }
 
-$found = Get-ChildItem "$env:LOCALAPPDATA\AnthropicClaude" -Filter "claude.exe" -Recurse -ErrorAction SilentlyContinue |
+$found = Get-ChildItem "$env:LOCALAPPDATA" -Filter "claude.exe" -Recurse -ErrorAction SilentlyContinue |
          Select-Object -First 1
 if (-not $found) {
     Write-Host "    Claude Desktop non detecte - ouverture du navigateur..." -ForegroundColor Yellow
