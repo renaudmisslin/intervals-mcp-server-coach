@@ -1,50 +1,47 @@
-"""Coach-specific tools: list configured athletes."""
+"""Coach-specific tools: list coached athletes from Intervals.icu."""
 
 from __future__ import annotations
 
-from ..athletes import list_athlete_names
+from ..athletes import list_athletes, resolve_athlete_id
 
 
 async def icu_list_athletes() -> str:
-    """List all athletes configured in athletes.json.
+    """List all athletes you coach on Intervals.icu (tagged 'Coaching').
 
-    Call this at the start of a coaching session to discover which athlete
-    names are available. Use those names as the athlete_name parameter in
-    other tools, or pass the corresponding athlete ID directly as athlete_id.
+    Call this at the start of a coaching session to discover available
+    athletes. Use their first name as athlete_name in other tools, or
+    pass their ID directly as athlete_id.
     """
     try:
-        names = list_athlete_names()
-    except FileNotFoundError as e:
-        return str(e)
+        athletes = list_athletes()
+    except Exception as e:
+        return f"Error fetching coached athletes: {e}"
 
-    if not names:
+    if not athletes:
         return (
-            "No athletes configured. "
-            "Edit athletes.json at the project root (see athletes.json.example)."
+            "No coached athletes found. "
+            "Make sure your athletes have added you as a coach on intervals.icu "
+            "and that they appear with the 'Coaching' tag."
         )
 
-    return (
-        f"Configured athletes ({len(names)}): {', '.join(names)}.\n"
-        "Use these names to look up athlete IDs, or pass them directly as athlete_name "
-        "when tools support it. For tools that only accept athlete_id, call "
-        "icu_resolve_athlete_id to get the ID for a given name."
-    )
+    lines = [f"Coached athletes ({len(athletes)}):"]
+    for a in athletes:
+        lines.append(f"  - {a['name']} ({a['id']})")
+    lines.append("\nUse the first name as athlete_name, or the ID as athlete_id in any tool.")
+    return "\n".join(lines)
 
 
 async def icu_resolve_athlete_id(athlete_name: str) -> str:
-    """Resolve an athlete name (from athletes.json) to their Intervals.icu athlete ID.
+    """Resolve an athlete's first name to their Intervals.icu athlete ID.
 
-    Use this when you have an athlete name but need to pass an athlete_id
-    to a tool. For example: resolve "thomas" → "i67890", then pass
-    athlete_id="i67890" to icu_get_wellness_data.
+    Use this when you have a name but need to pass athlete_id to a tool.
+    Example: resolve "Luc" → "i175757".
 
     Args:
-        athlete_name: Name of the athlete as configured in athletes.json.
+        athlete_name: First name of the athlete as it appears on intervals.icu.
     """
-    from ..athletes import resolve_athlete_id
-
     try:
         athlete_id = resolve_athlete_id(athlete_name)
         return f"Athlete '{athlete_name}' → {athlete_id}"
-    except (ValueError, FileNotFoundError) as e:
+    except (ValueError, Exception) as e:
         return str(e)
