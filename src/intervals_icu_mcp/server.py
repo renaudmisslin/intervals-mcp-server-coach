@@ -87,6 +87,7 @@ from .tools.sport_settings import (
 )
 from .tools.wellness import get_wellness_data, get_wellness_for_date, update_wellness
 from .tools.workout_library import get_workout_library, get_workouts_in_folder
+from .tools.coach import icu_list_athletes, icu_resolve_athlete_id
 
 # Register activity tools
 mcp.tool(
@@ -627,6 +628,26 @@ mcp.tool(
         "openWorldHint": True,
     },
 )(update_custom_item)
+# Register coach multi-athlete tools
+mcp.tool(
+    name="icu_list_athletes",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)(icu_list_athletes)
+mcp.tool(
+    name="icu_resolve_athlete_id",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)(icu_resolve_athlete_id)
+
 if _DELETE_MODE == "full":
     mcp.tool(
         name="icu_delete_custom_item",

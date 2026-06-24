@@ -48,6 +48,7 @@ async def get_hr_curves(
         str | None,
         "Time period shorthand: 'week', 'month', 'year', 'all' (optional)",
     ] = None,
+    athlete_id: Annotated[str | None, "Athlete ID for coach multi-athlete access (e.g. 'i67890'). Omit for your own data."] = None,
     ctx: Context | None = None,
 ) -> str:
     """Fetch the HR-vs-duration curve — best (highest) sustained HR across durations from 5s up to 1h, aggregated over the chosen window.
@@ -66,7 +67,7 @@ async def get_hr_curves(
         curves, period_label = period
 
         async with ICUClient(config) as client:
-            curve_set = await client.get_hr_curves(curves=curves, type=sport_type)
+            curve_set = await client.get_hr_curves(curves=curves, type=sport_type, athlete_id=athlete_id)
 
             if not curve_set.curves or not curve_set.curves[0].values:
                 return ResponseBuilder.build_response(
@@ -179,6 +180,7 @@ async def get_pace_curves(
         "Time period shorthand: 'week', 'month', 'year', 'all' (optional)",
     ] = None,
     use_gap: Annotated[bool, "Use Grade Adjusted Pace (GAP) for running"] = False,
+    athlete_id: Annotated[str | None, "Athlete ID for coach multi-athlete access (e.g. 'i67890'). Omit for your own data."] = None,
     ctx: Context | None = None,
 ) -> str:
     """Fetch the pace-vs-duration curve — best (fastest) sustained pace across durations from 5s up to 1h, aggregated over the chosen window.
@@ -199,7 +201,7 @@ async def get_pace_curves(
 
         async with ICUClient(config) as client:
             curve_set = await client.get_pace_curves(
-                curves=curves, type=sport_type, use_gap=use_gap
+                curves=curves, type=sport_type, use_gap=use_gap, athlete_id=athlete_id
             )
 
             if not curve_set.curves or not curve_set.curves[0].values:

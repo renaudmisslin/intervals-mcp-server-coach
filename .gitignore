@@ -63,5 +63,8 @@ exports/
 # MCP local config
 .mcp.json
 
+# Coach credentials (never commit)
+athletes.json
+
 # Smoke eval results
 .smoke-eval/

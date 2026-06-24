@@ -1,7 +1,7 @@
 """Athlete profile and fitness tools for Intervals.icu MCP server."""
 
 from datetime import date
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import Context
 
@@ -11,6 +11,7 @@ from ..response_builder import ResponseBuilder
 
 
 async def get_athlete_profile(
+    athlete_id: Annotated[str | None, "Athlete ID for coach multi-athlete access (e.g. 'i67890'). Omit for your own data."] = None,
     ctx: Context | None = None,
 ) -> str:
     """Get the authenticated athlete's profile — personal details, sport settings (FTP/FTHR/pace thresholds per sport), and current CTL/ATL/TSB with form interpretation."""
@@ -19,7 +20,7 @@ async def get_athlete_profile(
 
     try:
         async with ICUClient(config) as client:
-            athlete = await client.get_athlete()
+            athlete = await client.get_athlete(athlete_id=athlete_id)
 
             # Build profile data
             profile: dict[str, Any] = {
@@ -136,6 +137,7 @@ async def get_athlete_profile(
 
 
 async def get_fitness_summary(
+    athlete_id: Annotated[str | None, "Athlete ID for coach multi-athlete access (e.g. 'i67890'). Omit for your own data."] = None,
     ctx: Context | None = None,
 ) -> str:
     """Get the athlete's current fitness / fatigue / form snapshot — CTL, ATL, TSB, ramp rate, with interpretation and training recommendations.
@@ -148,7 +150,7 @@ async def get_fitness_summary(
     try:
         async with ICUClient(config) as client:
             today = date.today().isoformat()
-            wellness = await client.get_wellness_for_date(today)
+            wellness = await client.get_wellness_for_date(today, athlete_id=athlete_id)
 
             ctl = wellness.ctl
             atl = wellness.atl
