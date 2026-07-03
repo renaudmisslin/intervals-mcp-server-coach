@@ -1,63 +1,48 @@
-# Contributing to Intervals.icu MCP Server
+# Contributing
 
-Thank you for taking the time to contribute! This project uses **Python 3.12** and manages its dependencies with [uv](https://github.com/astral-sh/uv). The following guide summarizes how to set up your environment and outlines the workflow we expect for pull requests.
+Thanks for your interest in improving the Intervals.icu MCP server. Bug reports, feature requests, and pull requests are all welcome.
 
-## Development environment
-
-1. Create a virtual environment and activate it:
-   ```bash
-   uv venv --python 3.12
-   source .venv/bin/activate
-   ```
-2. Install all dependencies (including development extras):
-   ```bash
-   uv sync --all-extras
-   ```
-3. When working on or manually running the server, use:
-   ```bash
-   mcp run src/intervals_mcp_server/server.py
-   ```
-
-## Dependency changes
-
-1. Edit `pyproject.toml`.
-2. Run `uv lock` (or `uv sync`).
-3. Commit **both** `pyproject.toml` and `uv.lock` in the same commit.
-
-If you add, remove, or relax a dependency but forget to update the lock file, CI will fail. Treat `uv.lock` as a first-class artifact: review it when it changes, but don’t fear committing it.
-
-## Code-only changes
-
-For changes that do not modify dependencies, keep the lock file untouched. Run your tests with:
+## Development setup
 
 ```bash
-uv run --locked pytest
+git clone https://github.com/hhopke/intervals-icu-mcp.git
+cd intervals-icu-mcp
+make install            # uv sync — installs runtime and dev deps
+uv run intervals-icu-mcp-auth   # one-time credential setup
 ```
 
-CI will also run `uv lock --check` to ensure `uv.lock` stays in sync.
+Most common tasks are exposed as `make` targets — run `make help` to see the full list.
 
-## Why keep the lock file?
+## Before you open a pull request
 
-* **Reproducibility** – All collaborators and CI runners install identical hashes.
-* **Security** – Hash pinning in `uv.lock` helps prevent supply-chain attacks.
-* **Speed** – `uv` skips resolution when the lock matches, keeping installs lightning-fast.
-
-Automated dependency upgrades are encouraged. You can use Dependabot, Renovate, or a scheduled GitHub Action that runs `uv lock --upgrade && git push` to keep the file fresh and generate tidy PRs.
-
-## Testing
-
-Before opening a pull request, ensure all checks pass locally:
+Run the same gate CI runs:
 
 ```bash
-ruff check .
-mypy src tests
-uv run --locked pytest
+make can-release
 ```
 
-## Pull request guidelines
+This executes, in order:
 
-* Use concise commit messages.
-* Title your pull request using the format `[intervals-mcp-server] <brief description>`.
-* Describe any manual testing you performed and confirm whether `ruff`, `mypy`, and `pytest` passed.
+- `pytest` — the full test suite (see [docs/testing.md](docs/testing.md))
+- `ruff check` — lint
+- `pyright` — strict type-check on `src/`
 
-We appreciate your contributions and your attention to these guidelines. Happy coding!
+All three must be green before a PR can merge. If you're adding a tool, please also add a respx-mocked test alongside it — the existing tests in `tests/test_activity_tools.py` and `tests/test_event_tools.py` are good templates.
+
+## Adding a new MCP tool
+
+The repo ships a step-by-step guide: [.claude/skills/add-tool/SKILL.md](.claude/skills/add-tool/SKILL.md). It walks through the canonical pattern — client method → tool function → registration in `server.py` → tests — and keeps new tools consistent with the existing 51.
+
+## Reporting bugs / requesting features
+
+Open an issue using the templates at [github.com/hhopke/intervals-icu-mcp/issues/new/choose](https://github.com/hhopke/intervals-icu-mcp/issues/new/choose). For bugs, please include the MCP client you're using (Claude Desktop, Claude Code, Cursor, etc.), the tool name, and the full error response if you have one.
+
+## Code style
+
+- Python 3.11+, 100-char lines, double quotes — enforced by ruff (`make format` auto-fixes).
+- Public tools use `Annotated[..., "description"]` on every parameter so LLMs can reason about arguments.
+- Every tool returns a JSON string built via `ResponseBuilder` for consistency.
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the project's [MIT License](LICENSE).

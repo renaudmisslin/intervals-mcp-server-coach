@@ -1,26 +1,50 @@
-FROM python:3.12-slim
+# Multi-stage build for minimal final image
+FROM --platform=$TARGETPLATFORM ghcr.io/astral-sh/uv:latest AS uv
+
+FROM --platform=$TARGETPLATFORM python:3.11-slim AS builder
+
+# Install uv for faster dependency management
+COPY --from=uv /uv /usr/local/bin/uv
 
 # Set working directory
 WORKDIR /app
 
-# Install build dependencies and Python build backend
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-       build-essential \
-       curl \
-    && rm -rf /var/lib/apt/lists/*
+# Version is derived from git via hatch-vcs at build time, but the .git
+# directory is not in the Docker build context. The CI workflow builds a
+# wheel locally to compute the version and passes it through as a build-arg.
+ARG PKG_VERSION=0.0.0+docker
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=$PKG_VERSION
 
-# Install Python build tool
-RUN pip install --no-cache-dir hatchling
+# Copy dependency files and README (needed for package metadata)
+COPY pyproject.toml uv.lock* README.md ./
 
-# Copy project files
-COPY pyproject.toml pyproject.toml
-COPY src src
-COPY README.md README.md
-COPY .env.example .env.example
+# Copy source code (needed for building the package)
+COPY src/ ./src/
 
-# Install the package and runtime dependencies
-RUN pip install --no-cache-dir .
+# Install dependencies into a virtual environment
+RUN uv sync --frozen --no-dev
 
-# Default command to run the MCP server using stdio transport
-CMD ["mcp", "run", "src/intervals_mcp_server/server.py"]
+# Final stage - minimal runtime image
+FROM --platform=$TARGETPLATFORM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application code
+COPY src/ ./src/
+COPY pyproject.toml ./
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Health check (optional - checks if Python and dependencies are available)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import intervals_icu_mcp; print('ok')" || exit 1
+
+# Run the MCP server
+ENTRYPOINT ["python", "-m", "intervals_icu_mcp.server"]

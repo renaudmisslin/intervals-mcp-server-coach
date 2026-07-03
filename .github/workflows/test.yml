@@ -1,0 +1,72 @@
+name: Test
+
+on:
+  push:
+    branches-ignore:
+      - main
+  workflow_call:
+
+jobs:
+  test:
+    name: Run Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run linting (ruff)
+        run: uv run ruff check
+
+      - name: Run type checking (pyright)
+        run: uv run pyright
+
+      - name: Run tests
+        run: >
+          uv run pytest
+          --cov=src/intervals_icu_mcp
+          --cov-report=term-missing
+          --cov-fail-under=80
+
+  package:
+    name: Validate package metadata and doc files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Validate PyPI metadata and README rendering
+        run: make lint/package
+
+      - name: Verify internal doc files exist
+        run: |
+          test -f CHANGELOG.md
+          test -f docs/tools.md
+          test -f docs/examples.md
+          test -f docs/architecture.md
+          test -f docs/testing.md
+          test -f .claude/skills/add-tool/SKILL.md
